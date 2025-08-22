@@ -1,0 +1,7 @@
+services:
+  - type: worker
+    name: discord-bot-php
+    env: docker
+    envVars:
+      - key: DISCORD_TOKEN
+        sync: false
