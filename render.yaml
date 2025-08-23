@@ -1,7 +1,10 @@
 services:
-  - type: worker
+  - type: web                 # <-- cambiado de "worker" a "web"
     name: discord-bot-php
     env: docker
+    dockerfilePath: ./Dockerfile
     envVars:
       - key: DISCORD_TOKEN
         sync: false
+    # Render detectará EXPOSE 10000 del Dockerfile; si usas otro, descomenta:
+    # port: 10000
