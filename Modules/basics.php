@@ -16,8 +16,8 @@ class basics
     public function handle(Message $message): void
     {
         if ($message->content === '!ping') {
-            $latency = $this->bot->getPing();
-            $message->channel->sendMessage("🏓 Pong {$latency} ms");
+            $ping = round($this->bot->getLoop()->getTimerCount() * 1000); // aproximado
+            $message->channel->sendMessage("🏓 Pong {$ping} ms");
         }
     }
 }
