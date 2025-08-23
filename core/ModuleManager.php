@@ -1,5 +1,5 @@
 <?php
-namespace Core;
+namespace core;
 
 use Discord\Discord;
 use Discord\Parts\Channel\Message;
