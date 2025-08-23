@@ -15,5 +15,9 @@ RUN apt-get update \
 # Decirle a Render que habrá un puerto
 EXPOSE 10000
 
+ENV DISCORD_TOKEN=$DISCORD_TOKEN
+ENV TELEGRAM_BOT_TOKEN=$TELEGRAM_BOT_TOKEN
+ENV DISCORD_BRIDGE_CHANNEL=$DISCORD_BRIDGE_CHANNEL
+
 # Arrancar el servidor HTTP que “mantiene vivo” el contenedor
 ENTRYPOINT ["php", "public/index.php"]
