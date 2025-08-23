@@ -33,12 +33,18 @@ $discord->on('message', function ($message) use ($manager) {
         case '!load':
             if (count($cmd) !== 2) return;
             $manager->load($cmd[1]);
-            $message->channel->sendMessage("✅ Módulo {$cmd[1]} cargado.");
+            $message->channel->sendMessage("✅ Module {$cmd[1]} loaded.");
             break;
         case '!unload':
             if (count($cmd) !== 2) return;
-            $manager->unload($cmd[1]);
-            $message->channel->sendMessage("❌ Módulo {$cmd[1]} descargado.");
+
+            if ($cmd[1] === 'all') {
+                $manager->unloadAll();
+                $message->channel->sendMessage('🧹 All modules unloaded.');
+                } else {
+                    $manager->unload($cmd[1]);
+                    $message->channel->sendMessage("❌ Module {$cmd[1]} unloaded.");
+                }
             break;
         default:
             // Delegar al ModuleManager
