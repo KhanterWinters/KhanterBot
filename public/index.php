@@ -19,5 +19,11 @@ $http   = new React\Http\HttpServer(
 $http->listen($socket);
 echo "HTTP keep-alive listening on {$socket->getAddress()}\n";
 
+// Verificación rápida
+if (empty($_ENV['TELEGRAM_BOT_TOKEN'])) {
+    echo "[ERROR] TELEGRAM_BOT_TOKEN vacío\n";
+    exit(1);
+}
+
 // Arrancar también el bot
 require __DIR__ . '/../KhanterBot.php';
