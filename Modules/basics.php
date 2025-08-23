@@ -4,7 +4,7 @@ namespace Modules;
 use Discord\Discord;
 use Discord\Parts\Channel\Message;
 
-class PingModule
+class basics
 {
     private Discord $bot;
 
