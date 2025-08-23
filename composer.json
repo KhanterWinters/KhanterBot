@@ -1,6 +1,6 @@
 {
   "require": {
-    "team-reflex/discord-php": "^7.0"
+    "team-reflex/discord-php": "^7.0",
     "react/http": "^1.9"
   },
   "autoload": {
