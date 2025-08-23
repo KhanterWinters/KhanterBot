@@ -43,6 +43,14 @@ class ModuleManager
         return true;
     }
 
+    public function unloadAll(): void
+    {
+        foreach ($this->listLoaded() as $name) {
+            $this->unload($name);
+        }
+    echo "All modules unloaded.\n";
+    }
+
     public function handleMessage(Message $message): void
     {
         foreach ($this->loaded as $module) {
