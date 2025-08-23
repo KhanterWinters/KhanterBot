@@ -3,6 +3,7 @@ declare(strict_types=1);
 require __DIR__ . '/vendor/autoload.php';
 
 use Discord\Discord;
+use Discord\WebSockets\Intents;
 use core\ModuleManager;
 
 $discord = new Discord([
