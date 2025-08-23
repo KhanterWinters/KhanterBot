@@ -16,7 +16,7 @@ $manager = new ModuleManager($discord);
 $discord->on('ready', function () use ($manager) {
     echo "Bot ready\n";
     // Cargar módulos de arranque
-    $manager->load('Basics'); //Ping Module and Basics tools
+    $manager->load('basics'); //Ping Module and Basics tools
     $manager->load('DadJoke'); //Typical Joke of "I am"
     $manager->load('LanguageTranslate'); // Find and fit free translate API
     $manager->load('Kingdoms'); // API for Travian Kingdoms
