@@ -15,13 +15,19 @@ class basics
 
     public function handle(Message $message): void
     {
-        if ($message->content === '!ping') {
-        // Opción 1: latencia real (DiscordPHP ≥ 7.0)
-        $latency = round($this->bot->ping);
-        $message->channel->sendMessage("🏓 Pong {$latency} ms");
+        $text = $message->content;
 
-        // Opción 2: texto plano (si la anterior falla)
-        // $message->channel->sendMessage('🏓 Pong!');
+        switch ($text) {
+            case '!ping':
+                $latency = round($this->bot->ping);
+                $message->channel->sendMessage("🏓 Pong {$latency} ms");
+                break;
+
+            case '!uptime':
+                $uptime = time() - $_SERVER['REQUEST_TIME_FLOAT'];
+                $message->channel->sendMessage(
+                    "My up time is: " . gmdate("H:i:s", (int)$uptime)
+                );
+                break;
         }
     }
-}
