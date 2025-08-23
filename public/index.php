@@ -22,6 +22,7 @@ echo "HTTP keep-alive listening on {$socket->getAddress()}\n";
 // Verificación rápida
 if (empty($_ENV['TELEGRAM_BOT_TOKEN'])) {
     var_dump($_ENV);          // para ver TODO lo que llega
+    var_dump(getenv('TELEGRAM_BOT_TOKEN'));
     echo "[ERROR] TELEGRAM_BOT_TOKEN vacío\n";
     exit(1);
 }
