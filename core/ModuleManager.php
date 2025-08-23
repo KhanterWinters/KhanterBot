@@ -64,4 +64,9 @@ class ModuleManager
     {
         return array_keys($this->loaded);
     }
+    public function getLoaded(): array
+    {
+        return $this->loaded;
+    }
+
 }
