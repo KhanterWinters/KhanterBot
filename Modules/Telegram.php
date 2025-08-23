@@ -14,9 +14,7 @@ class Telegram
     public function __construct(Discord $discord)
     {
         $this->discord  = $discord;
-        $this->telegram = new TelegramClient([
-            'token' => $_ENV['TELEGRAM_BOT_TOKEN'],
-        ]);
+        $this->telegram = new TelegramClient($_ENV['TELEGRAM_BOT_TOKEN']);
     }
 
     /* ---------- Discord → Telegram ---------- */
