@@ -1,13 +1,19 @@
 FROM php:8.2-cli
 WORKDIR /app
+
+# Copiar todo el repo
 COPY . .
 
+# Instalar utilidades y Composer
 RUN apt-get update \
  && apt-get install -y git unzip \
  && curl -sS https://getcomposer.org/installer | php -- \
         --install-dir=/usr/local/bin --filename=composer \
  && composer install --no-dev --optimize-autoloader \
- && composer dump-autoload --optimize \
- && php -r "echo 'Autoload classes:' . PHP_EOL; print_r(get_declared_classes());"
+ && composer dump-autoload --optimize
 
-ENTRYPOINT ["php", "KhanterBot.php"]
+# Decirle a Render que habrá un puerto
+EXPOSE 10000
+
+# Arrancar el servidor HTTP que “mantiene vivo” el contenedor
+ENTRYPOINT ["php", "public/index.php"]
