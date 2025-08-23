@@ -7,6 +7,7 @@ use core\ModuleManager;
 
 $discord = new Discord([
     'token' => $_ENV['DISCORD_TOKEN'] ?? getenv('DISCORD_TOKEN'),
+    'intents' => Intents::getDefaultIntents() | Intents::MESSAGE_CONTENT,
 ]);
 
 $manager = new ModuleManager($discord);
