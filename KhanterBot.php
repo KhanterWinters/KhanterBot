@@ -3,7 +3,7 @@ declare(strict_types=1);
 require __DIR__ . '/vendor/autoload.php';
 
 use Discord\Discord;
-use Core\ModuleManager;
+use core\ModuleManager;
 
 $discord = new Discord([
     'token' => $_ENV['DISCORD_TOKEN'] ?? getenv('DISCORD_TOKEN'),
