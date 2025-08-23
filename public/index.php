@@ -24,6 +24,8 @@ if (empty($_ENV['TELEGRAM_BOT_TOKEN'])) {
     echo "[ERROR] TELEGRAM_BOT_TOKEN vacío\n";
     exit(1);
 }
+var_dump($_ENV);          // para ver TODO lo que llega
+exit;
 
 // Arrancar también el bot
 require __DIR__ . '/../KhanterBot.php';
