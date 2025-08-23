@@ -1,7 +1,8 @@
 {
   "require": {
     "team-reflex/discord-php": "^7.0",
-    "react/http": "^1.9"
+    "react/http": "^1.9",
+    "irazasyed/telegram-bot-sdk": "^3.13"
   },
   "autoload": {
     "psr-4": {
