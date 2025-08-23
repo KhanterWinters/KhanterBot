@@ -16,8 +16,12 @@ class basics
     public function handle(Message $message): void
     {
         if ($message->content === '!ping') {
-            $ping = round($this->bot->getLoop()->getTimerCount() * 1000); // aproximado
-            $message->channel->sendMessage("🏓 Pong {$ping} ms");
+        // Opción 1: latencia real (DiscordPHP ≥ 7.0)
+        $latency = round($this->bot->ping);
+        $message->channel->sendMessage("🏓 Pong {$latency} ms");
+
+        // Opción 2: texto plano (si la anterior falla)
+        // $message->channel->sendMessage('🏓 Pong!');
         }
     }
 }
