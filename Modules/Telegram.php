@@ -14,7 +14,13 @@ class Telegram
     public function __construct(Discord $discord)
     {
         $this->discord  = $discord;
-        $this->telegram = new \Telegram\Bot\Api(getenv('TELEGRAM_BOT_TOKEN'));
+        $token = getenv('TELEGRAM_BOT_TOKEN') ?: ($_SERVER['TELEGRAM_BOT_TOKEN'] ?? null);
+
+        if (!$token) {
+            throw new \RuntimeException('TELEGRAM_BOT_TOKEN no está definido en Render.');
+        }
+
+        $this->telegram = new \Telegram\Bot\Api($token);
     }
 
     /* ---------- Discord → Telegram ---------- */
