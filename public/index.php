@@ -25,6 +25,15 @@ if (empty($_ENV['TELEGRAM_BOT_TOKEN'])) {
     echo "[ERROR] TELEGRAM_BOT_TOKEN vacío\n";
     exit(1);
 }
-
+// /debug – muestra todas las variables de entorno
+$http->on('request', function (\Psr\Http\Message\ServerRequestInterface $req) {
+    if ($req->getUri()->getPath() === '/debug') {
+        return new \React\Http\Message\Response(
+            200,
+            ['Content-Type' => 'text/plain'],
+            var_export($_ENV, true)
+        );
+    }
+});
 // Arrancar también el bot
 require __DIR__ . '/../KhanterBot.php';
