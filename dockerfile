@@ -20,4 +20,7 @@ ENV TELEGRAM_BOT_TOKEN=$TELEGRAM_BOT_TOKEN
 ENV DISCORD_BRIDGE_CHANNEL=$DISCORD_BRIDGE_CHANNEL
 
 # Arrancar el servidor HTTP que “mantiene vivo” el contenedor
-ENTRYPOINT ["php", "public/index.php"]
+ENTRYPOINT ["sh", "-c", "export DISCORD_TOKEN=$DISCORD_TOKEN && \
+                          export TELEGRAM_BOT_TOKEN=$TELEGRAM_BOT_TOKEN && \
+                          export DISCORD_BRIDGE_CHANNEL=$DISCORD_BRIDGE_CHANNEL && \
+                          php public/index.php"]
