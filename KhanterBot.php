@@ -20,6 +20,7 @@ $discord->on('ready', function () use ($manager) {
     $manager->load('DadJoke'); //Typical Joke of "I am"
     $manager->load('LanguageTranslate'); // Find and fit free translate API
     $manager->load('Kingdoms'); // API for Travian Kingdoms
+    $manager->load('Youtube'); // Youtube Fetch
     $manager->load('Telegram'); // API for Telegram Chat
     $bridge = $manager->getLoaded()['Telegram'];
     $bridge->startTelegramPoller();
