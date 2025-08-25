@@ -13,14 +13,17 @@ class Telegram
 
     public function __construct(Discord $discord)
     {
-        $this->discord  = $discord;
-        $token = getenv('TELEGRAM_BOT_TOKEN') ?: ($_SERVER['TELEGRAM_BOT_TOKEN'] ?? null);
+        $this->discord = $discord;
 
+        $token = getenv('TELEGRAM_BOT_TOKEN') ?: ($_SERVER['TELEGRAM_BOT_TOKEN'] ?? null);
         if (!$token) {
             throw new \RuntimeException('TELEGRAM_BOT_TOKEN no está definido en Render.');
         }
-
         $this->telegram = new \Telegram\Bot\Api($token);
+
+        // Log al arranque
+        $map = $this->loadMap();
+        echo "Puente cargado al arranque: " . json_encode($map) . PHP_EOL;
     }
 
     /* ---------- Discord → Telegram ---------- */
@@ -79,35 +82,35 @@ class Telegram
         }
 
         if (count($pieces) < 2) {
-            $message->channel->sendMessage('Sub-comandos: `add`, `remove`, `list`.');
+            $message->channel->sendMessage('Telegram commands: `add`, `remove`, `list`, `status`.');
             return;
         }
 
         switch ($pieces[1]) {
             case 'add':
                 if (count($pieces) !== 4) {
-                    $message->channel->sendMessage('Uso: `!bridge add <discordId> <telegramId>`');
+                    $message->channel->sendMessage('Use: `!bridge add <discordId> <telegramId>`');
                     return;
                 }
                 [$cmd, $sub, $dcId, $tgId] = $pieces;
                 $this->addBridge($dcId, (int)$tgId);
-                $message->channel->sendMessage("✅ Puente añadido: Discord {$dcId} ↔ Telegram {$tgId}");
+                $message->channel->sendMessage("✅ Bridge added: Discord {$dcId} ↔ Telegram {$tgId}");
                 break;
 
             case 'remove':
                 if (count($pieces) !== 3) {
-                    $message->channel->sendMessage('Uso: `!bridge remove <discordId>`');
+                    $message->channel->sendMessage('Use: `!bridge remove <discordId>`');
                     return;
                 }
                 [$cmd, $sub, $dcId] = $pieces;
                 $this->removeBridge($dcId);
-                $message->channel->sendMessage("❌ Puente eliminado: Discord {$dcId}");
+                $message->channel->sendMessage("❌ Bridge removed: Discord {$dcId}");
                 break;
 
             case 'list':
                 $map = $this->listBridges();
                 if (empty($map)) {
-                    $message->channel->sendMessage('No hay puentes activos.');
+                    $message->channel->sendMessage('There is non active bridge.');
                     return;
                 }
                 $lines = array_map(
@@ -115,11 +118,20 @@ class Telegram
                     array_keys($map),
                     $map
                 );
-                $message->channel->sendMessage("Puentes activos:\n" . implode("\n", $lines));
+                $message->channel->sendMessage("Active bridges:\n" . implode("\n", $lines));
+                break;
+
+            case 'status':
+                $map = $this->listBridges();
+                $message->channel->sendMessage(
+                    empty($map)
+                        ? 'There is non active bridge.'
+                        : "Active bridges: " . json_encode($map, JSON_PRETTY_PRINT)
+                );
                 break;
 
             default:
-                $message->channel->sendMessage('Sub-comando no reconocido: `add`, `remove`, `list`.');
+                $message->channel->sendMessage('please use the next commands for Telegram module: `add`, `remove`, `list`, `status`.');
         }
     }
 
@@ -136,8 +148,8 @@ class Telegram
 
     private function addBridge(string $dcId, int $tgId): void
     {
-        $map = $this->loadMap();
-        $map[$dcId] = $tgId;
+        $map         = $this->loadMap();
+        $map[$dcId]  = $tgId;
         $this->saveMap($map);
     }
 
