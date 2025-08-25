@@ -15,7 +15,7 @@ register_shutdown_function(fn() => @unlink($lock));
 
 // ---------- HTTP ----------
 $loop   = React\EventLoop\Loop::get();
-$socket = new React\Socket\Server('0.0.0.0:' . ($_ENV['PORT'] ?? 4000), $loop);
+$socket = new React\Socket\Server('0.0.0.0:' . ($_ENV['PORT'] ?? 1000), $loop);
 $http   = new React\Http\HttpServer(function (ServerRequestInterface $req) {
     // /health no responde 200 hasta que el bot esté listo
     if ($req->getUri()->getPath() === '/health') {
