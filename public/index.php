@@ -4,37 +4,44 @@ use Psr\Http\Message\ServerRequestInterface;
 
 require_once __DIR__ . '/../vendor/autoload.php';
 
-$loop   = React\EventLoop\Loop::get();
-$socket = new React\Socket\Server('0.0.0.0:' . ($_ENV['PORT'] ?? 4000), $loop);
-$http   = new React\Http\HttpServer(
-    function (ServerRequestInterface $request) {
-        return new Response(
-            200,
-            ['Content-Type' => 'text/plain'],
-            "Bot alive\n"
-        );
-    }
-);
-
-$http->listen($socket);
-echo "HTTP keep-alive listening on {$socket->getAddress()}\n";
-
-// Verificación rápida
-if (empty($_ENV['TELEGRAM_BOT_TOKEN'])) {
-    var_dump($_ENV);          // para ver TODO lo que llega
-    var_dump(getenv('TELEGRAM_BOT_TOKEN'));
-    echo "[ERROR] TELEGRAM_BOT_TOKEN vacío\n";
+// ---------- lock ----------
+$lock = '/tmp/bot.lock';
+if (file_exists($lock)) {
+    echo "Bot already running\n";
     exit(1);
 }
-// /debug – muestra todas las variables de entorno
-$http->on('request', function (\Psr\Http\Message\ServerRequestInterface $req) {
+file_put_contents($lock, getmypid());
+register_shutdown_function(fn() => @unlink($lock));
+
+// ---------- HTTP ----------
+$loop   = React\EventLoop\Loop::get();
+$socket = new React\Socket\Server('0.0.0.0:' . ($_ENV['PORT'] ?? 4000), $loop);
+$http   = new React\Http\HttpServer(function (ServerRequestInterface $req) {
+    // /health no responde 200 hasta que el bot esté listo
+    if ($req->getUri()->getPath() === '/health') {
+        return new Response(
+            file_exists('/tmp/bot-ready') ? 200 : 503,
+            ['Content-Type' => 'text/plain'],
+            file_exists('/tmp/bot-ready') ? 'OK' : 'Starting'
+        );
+    }
+
     if ($req->getUri()->getPath() === '/debug') {
-        return new \React\Http\Message\Response(
+        return new Response(
             200,
             ['Content-Type' => 'text/plain'],
             var_export($_ENV, true)
         );
     }
+
+    return new Response(200, ['Content-Type' => 'text/plain'], "Bot alive\n");
 });
-// Arrancar también el bot
-require __DIR__ . '/../KhanterBot.php';
+
+$http->listen($socket);
+echo "HTTP keep-alive listening on {$socket->getAddress()}\n";
+
+// ----------  marcar “listo” cuando Discord esté ready ----------
+$discord = require __DIR__ . '/../KhanterBot.php';
+$discord->on('ready', function () {
+    file_put_contents('/tmp/bot-ready', '1');
+});
