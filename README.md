@@ -15,6 +15,8 @@ Bot does not keep up 24/7 yet, it needs to be revived or needs to be activity wi
 - Languages (to seek to reach the Babel Tower....)
   
 - Kingdoms (Investigate the API of Travian Kingdoms and work with it)
+
+-  Youtube (Youtube Fetch video)
   
 - Telegram (develop an integration discord - Telegram chats)
 
