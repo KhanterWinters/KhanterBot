@@ -1,4 +1,21 @@
 <?php
+/**
+ * Telegram Module for KhanterBot
+ *
+ * License: GNU Affero General Public License v3.0
+ * 
+ * DISCLAIMER:
+ * This software is provided "as-is" and may be freely used, modified, or studied.
+ * Commercial use under the author's name or branding is NOT permitted until trademark
+ * and notice are officially registered. Redistribution must retain this notice and the AGPL 3.0 license.
+ *
+ * Responsibilities:
+ * - Synchronizes messages between Discord channels and Telegram groups.
+ * - Discord → Telegram works for all messages in mapped channels.
+ * - Telegram → Discord works for all messages in mapped Telegram chats.
+ * - Poller runs automatically upon module initialization.
+ */
+
 namespace Modules;
 
 use Discord\Discord;
@@ -7,28 +24,39 @@ use Telegram\Bot\Api as TelegramClient;
 
 class Telegram
 {
-    private Discord        $discord;
+    private Discord $discord;
     private TelegramClient $telegram;
-    private string         $storage       = __DIR__ . '/../storage/bridges.json';
-    private string         $offsetFile    = __DIR__ . '/../storage/telegram_offset.txt';
-    private bool           $pollerStarted = false;
+    private string $storage       = __DIR__ . '/../storage/bridges.json';
+    private string $offsetFile    = __DIR__ . '/../storage/telegram_offset.txt';
+    private bool $pollerStarted   = false;
 
+    /**
+     * Constructor
+     */
     public function __construct(Discord $discord)
     {
         $this->discord = $discord;
 
-        // ✅ Get Telegram token safely from environment
-        $token = getenv('TELEGRAM_BOT_TOKEN') ?: ($_SERVER['TELEGRAM_BOT_TOKEN'] ?? ($_ENV['TELEGRAM_BOT_TOKEN'] ?? null));
+        // Fetch Telegram token safely from environment
+        $token = getenv('TELEGRAM_BOT_TOKEN') ?: ($_ENV['TELEGRAM_BOT_TOKEN'] ?? null);
         if (!$token) {
-            throw new \RuntimeException('TELEGRAM_BOT_TOKEN is not defined in Render.');
+            throw new \RuntimeException('TELEGRAM_BOT_TOKEN is not defined in environment.');
         }
 
-        // ✅ Always initialize the client with the token we actually validated
         $this->telegram = new TelegramClient($token);
 
-        // Log at startup for debugging
+        // Log bridge map at startup
         $map = $this->loadMap();
         echo "Bridge map loaded at startup: " . json_encode($map) . PHP_EOL;
+    }
+
+    /**
+     * Init is called automatically by ModuleManager after loading.
+     * Starts the Telegram poller loop.
+     */
+    public function init(): void
+    {
+        $this->startTelegramPoller();
     }
 
     /* ---------- Discord → Telegram ---------- */
@@ -37,11 +65,8 @@ class Telegram
         $map = $this->loadMap();
         if (!isset($map[$msg->channel_id])) return;
 
-        $text = sprintf(
-            "**%s** (Discord): %s",
-            $msg->author->username,
-            $msg->content
-        );
+        $text = sprintf("**%s** (Discord): %s", $msg->author->username, $msg->content);
+
         $this->telegram->sendMessage([
             'chat_id'    => $map[$msg->channel_id],
             'text'       => $text,
@@ -55,21 +80,13 @@ class Telegram
         if ($this->pollerStarted) return;
         $this->pollerStarted = true;
 
-        // ❌ Removed duplicate lock check.
-        // The global lock is already managed by public/index.php.
-        // If we kept it, Telegram poller never started after restart.
-
         $last = $this->getLastOffset();
 
-        // Run a periodic timer inside Discord's event loop.
-        // Every 5 seconds we poll Telegram for new updates.
         $this->discord->getLoop()->addPeriodicTimer(5, function () use (&$last) {
             try {
                 $updates = $this->telegram->getUpdates([
                     'offset'  => $last + 1,
-                    // ✅ Set timeout to 0 (non-blocking).
-                    // With timeout=30 the call could hang and block the loop.
-                    'timeout' => 0,
+                    'timeout' => 0, // non-blocking
                 ]);
 
                 foreach ($updates as $upd) {
@@ -87,18 +104,18 @@ class Telegram
                     $dcChannel = $this->discord->getChannel($dcCh);
                     $dcChannel?->sendMessage($text);
 
-                    // Update offset after each processed message
+                    // Persist last processed update_id
                     $last = $upd['update_id'];
                     $this->setLastOffset($last);
                 }
             } catch (\Throwable $e) {
-                // Log errors silently to avoid killing the loop
+                // Log errors silently, avoid killing the bot
                 echo "Telegram poller error: " . $e->getMessage() . PHP_EOL;
             }
         });
     }
 
-    /* ---------- Commands ---------- */
+    /* ---------- Command handler for Discord ---------- */
     public function handle(Message $message): void
     {
         $text   = $message->content;
@@ -184,7 +201,7 @@ class Telegram
         }
     }
 
-    /* ---------- Utils ---------- */
+    /* ---------- Bridge management ---------- */
     private function loadMap(): array
     {
         return json_decode(file_get_contents($this->storage), true) ?: [];
@@ -197,7 +214,7 @@ class Telegram
 
     private function addBridge(string $dcId, int $tgId): void
     {
-        $map        = $this->loadMap();
+        $map = $this->loadMap();
         $map[$dcId] = $tgId;
         $this->saveMap($map);
     }
