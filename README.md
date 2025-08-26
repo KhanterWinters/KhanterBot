@@ -1,28 +1,74 @@
 # KhanterBot
-Prospect of Discord bot in php with modules.
 
-Bot first prospect modules that will held:
+Prospect of a Discord bot written in **PHP** with a modular architecture.
 
-Bot does not keep up 24/7 yet, it needs to be revived or needs to be activity within 50 seconds (in To-Do list to solve critically).
+> ⚠️ The bot is not running 24/7 yet.  
+> It needs manual revival or activity within 50 seconds.  
+> (This is currently a **critical To-Do**).
 
-- Basics (Utilitaries, including the ping to check latency)
+---
 
-  Functional !ping and return with the latency, and !uptime to check the time being up.
-  It will need other utilitaries.
+## ✨ Planned Modules
 
-- Dadjoke (Main purpose of Khanter Bot is to annoy with....)
-  
-- Languages (to seek to reach the Babel Tower....)
-  
-- Kingdoms (Investigate the API of Travian Kingdoms and work with it)
+### 🔹 Basics (Utilities)
+- `!ping` → Returns latency. ✅
+- `!uptime` → Shows how long the bot has been running. ✅  
+- More utility commands are planned.
 
--  Youtube (Youtube Fetch video)
-  
-- Telegram (develop an integration discord - Telegram chats)
+---
 
-  Functional Tested, Bot is linked with @KhanterDiscordBot, a Bot of telegram. To work, the Telegram Bot needs to be in the group with messages permission (Read & Send).
-  It is being developed to allow registration of more channels into a same group.
-  Mentions from Telegram into Discord Works.
-  Mentions from Discord into Telegram needs to be revisted.
+### 🔹 Dadjoke
+- Main purpose of KhanterBot: **annoy with terrible dad jokes**. 😆
 
-- Quotes (just drop quotes per request)
+---
+
+### 🔹 Languages
+- Seeks to reach the **Babel Tower**…  
+- Planned multilingual support.
+
+---
+
+### 🔹 Kingdoms
+- Integration with the **Travian Kingdoms API**.  
+- Will allow interaction with in-game data.
+
+---
+
+### 🔹 YouTube
+- Fetch YouTube videos.  
+- To be developed.
+
+---
+
+### 🔹 Telegram
+- Integration between **Discord ↔ Telegram** chats.  
+- ✅ Bot is linked with [@KhanterDiscordBot](https://t.me/KhanterDiscordBot).  
+- Requirements:
+  - Telegram bot must be in the group.
+  - Needs permission to **Read & Send** messages.
+- Current features:
+  - ✅ Mentions from **Telegram → Discord** work.
+  - ❌ Mentions from **Discord → Telegram** need to be revisited.
+- Goal: allow registration of **multiple channels** into a single group.
+
+---
+
+### 🔹 Quotes
+- Just drop **quotes on request**.  
+- Simple and fun feature.
+
+---
+
+## 📌 Roadmap
+- [ ] Keep the bot alive **24/7** (critical).
+- [ ] Expand utility commands.
+- [ ] Finalize Discord ↔ Telegram sync.
+- [ ] Add YouTube fetching.
+- [ ] Improve multilingual support.
+- [ ] Travian Kingdoms API integration.
+
+---
+
+## 💡 Notes
+KhanterBot is still a **prototype** under development.  
+Contributions, ideas, and feature requests are welcome!
