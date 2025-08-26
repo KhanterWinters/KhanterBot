@@ -50,6 +50,23 @@ $discord->on('message', function ($message) use ($manager) {
                     $message->channel->sendMessage("❌ Module {$cmd[1]} unloaded.");
                 }
             break;
+        case '!modules':
+            $loadedModules = $manager->listLoaded();
+            $allModules = [];
+            $modulesFiles = scandir(__DIR__ . '/Modules');
+            foreach ($modulesFiles as $file) {
+                if (strpos($file, '.php') !== false) {
+                    $moduleName = pathinfo($file, PATHINFO_FILENAME);
+                    $allModules[] = $moduleName;
+                }
+            }
+
+            $unloadedModules = array_diff($allModules, $loadedModules);
+
+            $response = "Modules loaded:\n" . implode("\n", $loadedModules) . "\n\n";
+            $response .= "Modules not loaded:\n" . implode("\n", $unloadedModules);
+            $message->channel->sendMessage($response);
+            break;
         default:
             // Delegar al ModuleManager
             $manager->handleMessage($message);
