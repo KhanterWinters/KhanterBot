@@ -9,7 +9,8 @@ class Telegram
 {
     private Discord        $discord;
     private TelegramClient $telegram;
-    private string         $storage = __DIR__ . '/../storage/bridges.json';
+    private string         $storage      = __DIR__ . '/../storage/bridges.json';
+    private string         $offsetFile   = __DIR__ . '/../storage/telegram_offset.txt';
 
     public function __construct(Discord $discord)
     {
@@ -44,28 +45,36 @@ class Telegram
         ]);
     }
 
-    /* ---------- Telegram → Discord ---------- */
+    /* ---------- Telegram → Discord (con offset persistente) ---------- */
     public function startTelegramPoller(): void
     {
-        $last = 0;
-        $this->discord->getLoop()->addPeriodicTimer(2, function () use (&$last) {
-            $updates = $this->telegram->getUpdates(['offset' => $last + 1]);
-            foreach ($updates as $upd) {
-                if (!isset($upd['message']['text'])) continue;
+        $last = $this->getLastOffset();
+        $this->discord->getLoop()->addPeriodicTimer(5, function () use (&$last) {
+            try {
+                $updates = $this->telegram->getUpdates([
+                    'offset'  => $last + 1,
+                    'timeout' => 30,
+                ]);
+                foreach ($updates as $upd) {
+                    if (!isset($upd['message']['text'])) continue;
 
-                $tgChat = $upd['message']['chat']['id'];
-                $map    = $this->loadMap();
-                $dcCh   = array_search($tgChat, $map, true);
+                    $tgChat = $upd['message']['chat']['id'];
+                    $map    = $this->loadMap();
+                    $dcCh   = array_search($tgChat, $map, true);
 
-                if (!$dcCh) continue;
+                    if (!$dcCh) continue;
 
-                $user = $upd['message']['from']['username'] ?? $upd['message']['from']['first_name'];
-                $text = "**$user** (Telegram): {$upd['message']['text']}";
+                    $user = $upd['message']['from']['username'] ?? $upd['message']['from']['first_name'];
+                    $text = "**$user** (Telegram): {$upd['message']['text']}";
 
-                $dcChannel = $this->discord->getChannel($dcCh);
-                $dcChannel?->sendMessage($text);
+                    $dcChannel = $this->discord->getChannel($dcCh);
+                    $dcChannel?->sendMessage($text);
 
-                $last = $upd['update_id'];
+                    $last = $upd['update_id'];
+                    $this->setLastOffset($last);
+                }
+            } catch (\Throwable $e) {
+                // Silenciar o log
             }
         });
     }
@@ -82,35 +91,35 @@ class Telegram
         }
 
         if (count($pieces) < 2) {
-            $message->channel->sendMessage('Telegram commands: `add`, `remove`, `list`, `status`.');
+            $message->channel->sendMessage('Sub-comandos: `add`, `remove`, `list`, `status`.');
             return;
         }
 
         switch ($pieces[1]) {
             case 'add':
                 if (count($pieces) !== 4) {
-                    $message->channel->sendMessage('Use: `!bridge add <discordId> <telegramId>`');
+                    $message->channel->sendMessage('Uso: `!bridge add <discordId> <telegramId>`');
                     return;
                 }
                 [$cmd, $sub, $dcId, $tgId] = $pieces;
                 $this->addBridge($dcId, (int)$tgId);
-                $message->channel->sendMessage("✅ Bridge added: Discord {$dcId} ↔ Telegram {$tgId}");
+                $message->channel->sendMessage("✅ Puente añadido: Discord {$dcId} ↔ Telegram {$tgId}");
                 break;
 
             case 'remove':
                 if (count($pieces) !== 3) {
-                    $message->channel->sendMessage('Use: `!bridge remove <discordId>`');
+                    $message->channel->sendMessage('Uso: `!bridge remove <discordId>`');
                     return;
                 }
                 [$cmd, $sub, $dcId] = $pieces;
                 $this->removeBridge($dcId);
-                $message->channel->sendMessage("❌ Bridge removed: Discord {$dcId}");
+                $message->channel->sendMessage("❌ Puente eliminado: Discord {$dcId}");
                 break;
 
             case 'list':
                 $map = $this->listBridges();
                 if (empty($map)) {
-                    $message->channel->sendMessage('There is non active bridge.');
+                    $message->channel->sendMessage('No hay puentes activos.');
                     return;
                 }
                 $lines = array_map(
@@ -118,20 +127,20 @@ class Telegram
                     array_keys($map),
                     $map
                 );
-                $message->channel->sendMessage("Active bridges:\n" . implode("\n", $lines));
+                $message->channel->sendMessage("Puentes activos:\n" . implode("\n", $lines));
                 break;
 
             case 'status':
                 $map = $this->listBridges();
                 $message->channel->sendMessage(
                     empty($map)
-                        ? 'There is non active bridge.'
-                        : "Active bridges: " . json_encode($map, JSON_PRETTY_PRINT)
+                        ? 'No hay puentes activos.'
+                        : "Puentes activos: " . json_encode($map, JSON_PRETTY_PRINT)
                 );
                 break;
 
             default:
-                $message->channel->sendMessage('please use the next commands for Telegram module: `add`, `remove`, `list`, `status`.');
+                $message->channel->sendMessage('Sub-comando no reconocido: `add`, `remove`, `list`, `status`.');
         }
     }
 
@@ -163,5 +172,18 @@ class Telegram
     private function listBridges(): array
     {
         return $this->loadMap();
+    }
+
+    /* ---------- Offset helpers ---------- */
+    private function getLastOffset(): int
+    {
+        return is_file($this->offsetFile)
+            ? (int)file_get_contents($this->offsetFile)
+            : 0;
+    }
+
+    private function setLastOffset(int $offset): void
+    {
+        file_put_contents($this->offsetFile, (string)$offset);
     }
 }
