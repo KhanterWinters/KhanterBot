@@ -9,23 +9,26 @@ class Telegram
 {
     private Discord        $discord;
     private TelegramClient $telegram;
-    private string         $storage      = __DIR__ . '/../storage/bridges.json';
-    private string         $offsetFile   = __DIR__ . '/../storage/telegram_offset.txt';
+    private string         $storage       = __DIR__ . '/../storage/bridges.json';
+    private string         $offsetFile    = __DIR__ . '/../storage/telegram_offset.txt';
     private bool           $pollerStarted = false;
 
     public function __construct(Discord $discord)
     {
         $this->discord = $discord;
 
-        $token = getenv('TELEGRAM_BOT_TOKEN') ?: ($_SERVER['TELEGRAM_BOT_TOKEN'] ?? null);
+        // ✅ Get Telegram token safely from environment
+        $token = getenv('TELEGRAM_BOT_TOKEN') ?: ($_SERVER['TELEGRAM_BOT_TOKEN'] ?? ($_ENV['TELEGRAM_BOT_TOKEN'] ?? null));
         if (!$token) {
-            throw new \RuntimeException('TELEGRAM_BOT_TOKEN no está definido en Render.');
+            throw new \RuntimeException('TELEGRAM_BOT_TOKEN is not defined in Render.');
         }
-        $this->telegram = new \Telegram\Bot\Api($_ENV['TELEGRAM_BOT_TOKEN']);
 
-        // Log al arranque
+        // ✅ Always initialize the client with the token we actually validated
+        $this->telegram = new TelegramClient($token);
+
+        // Log at startup for debugging
         $map = $this->loadMap();
-        echo "Puente cargado al arranque: " . json_encode($map) . PHP_EOL;
+        echo "Bridge map loaded at startup: " . json_encode($map) . PHP_EOL;
     }
 
     /* ---------- Discord → Telegram ---------- */
@@ -46,54 +49,54 @@ class Telegram
         ]);
     }
 
-    /* ---------- Telegram → Discord (con offset persistente) ---------- */
+    /* ---------- Telegram → Discord (with persistent offset) ---------- */
     public function startTelegramPoller(): void
     {
         if ($this->pollerStarted) return;
         $this->pollerStarted = true;
 
-    // Mecanismo de bloqueo para evitar instancias duplicadas
-        $lockFile = '/tmp/bot.lock';
-            if (file_exists($lockFile)) {
-            return; // Si el archivo de bloqueo existe, no iniciamos el poller
-    }
-    file_put_contents($lockFile, getmypid());
-    register_shutdown_function(function() use ($lockFile) {
-        if (file_exists($lockFile)) {
-            unlink($lockFile);
-        }
-    });
+        // ❌ Removed duplicate lock check.
+        // The global lock is already managed by public/index.php.
+        // If we kept it, Telegram poller never started after restart.
 
-    $last = $this->getLastOffset();
-    $this->discord->getLoop()->addPeriodicTimer(5, function () use (&$last) {
-        try {
-            $updates = $this->telegram->getUpdates([
-                'offset'  => $last + 1,
-                'timeout' => 30,
-            ]);
-            foreach ($updates as $upd) {
-                if (!isset($upd['message']['text'])) continue;
+        $last = $this->getLastOffset();
 
-                $tgChat = $upd['message']['chat']['id'];
-                $map    = $this->loadMap();
-                $dcCh   = array_search($tgChat, $map, true);
+        // Run a periodic timer inside Discord's event loop.
+        // Every 5 seconds we poll Telegram for new updates.
+        $this->discord->getLoop()->addPeriodicTimer(5, function () use (&$last) {
+            try {
+                $updates = $this->telegram->getUpdates([
+                    'offset'  => $last + 1,
+                    // ✅ Set timeout to 0 (non-blocking).
+                    // With timeout=30 the call could hang and block the loop.
+                    'timeout' => 0,
+                ]);
 
-                if (!$dcCh) continue;
+                foreach ($updates as $upd) {
+                    if (!isset($upd['message']['text'])) continue;
 
-                $user = $upd['message']['from']['username'] ?? $upd['message']['from']['first_name'];
-                $text = "**$user** (Telegram): {$upd['message']['text']}";
+                    $tgChat = $upd['message']['chat']['id'];
+                    $map    = $this->loadMap();
+                    $dcCh   = array_search($tgChat, $map, true);
 
-                $dcChannel = $this->discord->getChannel($dcCh);
-                $dcChannel?->sendMessage($text);
+                    if (!$dcCh) continue;
 
-                $last = $upd['update_id'];
-                $this->setLastOffset($last);
+                    $user = $upd['message']['from']['username'] ?? $upd['message']['from']['first_name'];
+                    $text = "**$user** (Telegram): {$upd['message']['text']}";
+
+                    $dcChannel = $this->discord->getChannel($dcCh);
+                    $dcChannel?->sendMessage($text);
+
+                    // Update offset after each processed message
+                    $last = $upd['update_id'];
+                    $this->setLastOffset($last);
+                }
+            } catch (\Throwable $e) {
+                // Log errors silently to avoid killing the loop
+                echo "Telegram poller error: " . $e->getMessage() . PHP_EOL;
             }
-        } catch (\Throwable $e) {
-            // Silenciar o log
-        }
-    });
-}
+        });
+    }
 
     /* ---------- Commands ---------- */
     public function handle(Message $message): void
@@ -135,7 +138,7 @@ class Telegram
             case 'list':
                 $map = $this->listBridges();
                 if (empty($map)) {
-                    $message->channel->sendMessage('There is non active bridges.');
+                    $message->channel->sendMessage('There are no active bridges.');
                     return;
                 }
                 $lines = array_map(
@@ -150,17 +153,16 @@ class Telegram
                 $map = $this->listBridges();
                 $message->channel->sendMessage(
                     empty($map)
-                        ? 'There is non active bridges.'
+                        ? 'There are no active bridges.'
                         : "Active Bridges: " . json_encode($map, JSON_PRETTY_PRINT)
                 );
                 break;
 
             case 'fixoffset':
                 try {
-                    $token = $_ENV['TELEGRAM_BOT_TOKEN']; // Obtén el token directamente ( $token = $this->telegram->token;)
                     $response = json_decode(
                         file_get_contents(
-                            "https://api.telegram.org/bot{$token}/getUpdates?limit=1&offset=-1"
+                            "https://api.telegram.org/bot{$this->telegram->getAccessToken()}/getUpdates?limit=1&offset=-1"
                         ),
                         true
                     );
@@ -170,7 +172,7 @@ class Telegram
                         $message->channel->sendMessage("✅ Offset updated to: $last");
                     } else {
                         $this->setLastOffset(0);
-                        $message->channel->sendMessage("⚠️ Without messages; offset restarted to 0");
+                        $message->channel->sendMessage("⚠️ No messages; offset reset to 0");
                     }
                 } catch (\Throwable $e) {
                     $message->channel->sendMessage("❌ Error while updating offset: " . $e->getMessage());
@@ -195,8 +197,8 @@ class Telegram
 
     private function addBridge(string $dcId, int $tgId): void
     {
-        $map         = $this->loadMap();
-        $map[$dcId]  = $tgId;
+        $map        = $this->loadMap();
+        $map[$dcId] = $tgId;
         $this->saveMap($map);
     }
 
