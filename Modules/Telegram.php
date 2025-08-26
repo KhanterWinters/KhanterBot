@@ -21,7 +21,7 @@ class Telegram
         if (!$token) {
             throw new \RuntimeException('TELEGRAM_BOT_TOKEN no está definido en Render.');
         }
-        $this->telegram = new \Telegram\Bot\Api($token);
+        $this->telegram = new \Telegram\Bot\Api($_ENV['TELEGRAM_BOT_TOKEN']);
 
         // Log al arranque
         $map = $this->loadMap();
@@ -145,7 +145,7 @@ class Telegram
 
             case 'fixoffset':
                 try {
-                    $token = $this->telegram->token; // Obtén el token directamente
+                    $token = $_ENV['TELEGRAM_BOT_TOKEN']; // Obtén el token directamente ( $token = $this->telegram->token;)
                     $response = json_decode(
                         file_get_contents(
                             "https://api.telegram.org/bot{$token}/getUpdates?limit=1&offset=-1"
