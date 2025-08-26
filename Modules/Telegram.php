@@ -56,6 +56,7 @@ class Telegram
      */
     public function init(): void
     {
+        echo "[Telegram] init() called\n"; // <- para depuración
         $this->startTelegramPoller();
     }
 
