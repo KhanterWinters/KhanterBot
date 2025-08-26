@@ -16,22 +16,21 @@ $manager = new ModuleManager($discord);
 $discord->on('ready', function () use ($manager) {
     echo "Bot ready\n";
     // Cargar módulos de arranque
-    $manager->load('basics'); //Ping Module and Basics tools
-    $manager->load('DadJoke'); //Typical Joke of "I am"
+    $manager->load('basics'); // Ping Module and Basics tools
+    $manager->load('DadJoke'); // Typical Joke of "I am"
     $manager->load('LanguageTranslate'); // Find and fit free translate API
     $manager->load('Kingdoms'); // API for Travian Kingdoms
     $manager->load('Youtube'); // Youtube Fetch
     $telegram = $manager->getLoaded()['Telegram'] ?? null;
-        if ($telegram) {
-            $telegram->startTelegramPoller();
-        }
+    if ($telegram) {
+        $telegram->startTelegramPoller();
+    }
     $manager->load('Quotes'); // API for some Inspiring Quotes
 });
 
 $discord->on('message', function ($message) use ($manager) {
     if ($message->author->bot) return;
 
-    // Comandos de gestión
     $cmd = explode(' ', $message->content);
     switch ($cmd[0]) {
         case '!load':
@@ -41,23 +40,26 @@ $discord->on('message', function ($message) use ($manager) {
             break;
         case '!unload':
             if (count($cmd) !== 2) return;
-
             if ($cmd[1] === 'all') {
                 $manager->unloadAll();
                 $message->channel->sendMessage('🧹 All modules unloaded.');
-                } else {
-                    $manager->unload($cmd[1]);
-                    $message->channel->sendMessage("❌ Module {$cmd[1]} unloaded.");
-                }
+            } else {
+                $manager->unload($cmd[1]);
+                $message->channel->sendMessage("❌ Module {$cmd[1]} unloaded.");
+            }
             break;
         case '!modules':
+            // Obtener módulos cargados
             $loadedModules = $manager->listLoaded();
+            // Obtener todos los módulos disponibles en el directorio Modules
             $allModules = [];
             $modulesFiles = scandir(__DIR__ . '/Modules');
             foreach ($modulesFiles as $file) {
                 if (strpos($file, '.php') !== false) {
                     $moduleName = pathinfo($file, PATHINFO_FILENAME);
-                    $allModules[] = $moduleName;
+                    if ($moduleName !== 'ModuleManager' && $moduleName !== 'Core') { // Excluir gestor de módulos y otros archivos si es necesario
+                        $allModules[] = $moduleName;
+                    }
                 }
             }
 
@@ -66,7 +68,7 @@ $discord->on('message', function ($message) use ($manager) {
             $response = "Modules loaded:\n" . implode("\n", $loadedModules) . "\n\n";
             $response .= "Modules not loaded:\n" . implode("\n", $unloadedModules);
             $message->channel->sendMessage($response);
-            break;
+            return; // Evita que el mensaje se procese más allá
         default:
             // Delegar al ModuleManager
             $manager->handleMessage($message);
