@@ -11,6 +11,7 @@ class Telegram
     private TelegramClient $telegram;
     private string         $storage      = __DIR__ . '/../storage/bridges.json';
     private string         $offsetFile   = __DIR__ . '/../storage/telegram_offset.txt';
+    private bool           $pollerStarted = false;
 
     public function __construct(Discord $discord)
     {
@@ -48,6 +49,9 @@ class Telegram
     /* ---------- Telegram → Discord (con offset persistente) ---------- */
     public function startTelegramPoller(): void
     {
+        if ($this->pollerStarted) return;
+        $this->pollerStarted = true;
+
         $last = $this->getLastOffset();
         $this->discord->getLoop()->addPeriodicTimer(5, function () use (&$last) {
             try {
@@ -91,35 +95,35 @@ class Telegram
         }
 
         if (count($pieces) < 2) {
-            $message->channel->sendMessage('Sub-comandos: `add`, `remove`, `list`, `status`.');
+            $message->channel->sendMessage('Sub-commands: `add`, `remove`, `list`, `status`, `fixoffset`.');
             return;
         }
 
         switch ($pieces[1]) {
             case 'add':
                 if (count($pieces) !== 4) {
-                    $message->channel->sendMessage('Uso: `!bridge add <discordId> <telegramId>`');
+                    $message->channel->sendMessage('Use: `!bridge add <discordId> <telegramId>`');
                     return;
                 }
                 [$cmd, $sub, $dcId, $tgId] = $pieces;
                 $this->addBridge($dcId, (int)$tgId);
-                $message->channel->sendMessage("✅ Puente añadido: Discord {$dcId} ↔ Telegram {$tgId}");
+                $message->channel->sendMessage("✅ Bridge Added: Discord {$dcId} ↔ Telegram {$tgId}");
                 break;
 
             case 'remove':
                 if (count($pieces) !== 3) {
-                    $message->channel->sendMessage('Uso: `!bridge remove <discordId>`');
+                    $message->channel->sendMessage('Use: `!bridge remove <discordId>`');
                     return;
                 }
                 [$cmd, $sub, $dcId] = $pieces;
                 $this->removeBridge($dcId);
-                $message->channel->sendMessage("❌ Puente eliminado: Discord {$dcId}");
+                $message->channel->sendMessage("❌ Bridge removed: Discord {$dcId}");
                 break;
 
             case 'list':
                 $map = $this->listBridges();
                 if (empty($map)) {
-                    $message->channel->sendMessage('No hay puentes activos.');
+                    $message->channel->sendMessage('There is non active bridges.');
                     return;
                 }
                 $lines = array_map(
@@ -127,20 +131,41 @@ class Telegram
                     array_keys($map),
                     $map
                 );
-                $message->channel->sendMessage("Puentes activos:\n" . implode("\n", $lines));
+                $message->channel->sendMessage("Active Bridges:\n" . implode("\n", $lines));
                 break;
 
             case 'status':
                 $map = $this->listBridges();
                 $message->channel->sendMessage(
                     empty($map)
-                        ? 'No hay puentes activos.'
-                        : "Puentes activos: " . json_encode($map, JSON_PRETTY_PRINT)
+                        ? 'There is non active bridges.'
+                        : "Active Bridges: " . json_encode($map, JSON_PRETTY_PRINT)
                 );
                 break;
 
+            case 'fixoffset':
+                try {
+                    $response = json_decode(
+                        file_get_contents(
+                            "https://api.telegram.org/bot{$this->telegram->getBotToken()}/getUpdates?limit=1&offset=-1"
+                        ),
+                        true
+                    );
+                    if (!empty($response['result'])) {
+                        $last = $response['result'][0]['update_id'];
+                        $this->setLastOffset($last);
+                        $message->channel->sendMessage("✅ Offset updated to: $last");
+                    } else {
+                        $this->setLastOffset(0);
+                        $message->channel->sendMessage("⚠️ Without messages; offset restarted to 0");
+                    }
+                } catch (\Throwable $e) {
+                    $message->channel->sendMessage("❌ Error while updating offset: " . $e->getMessage());
+                }
+                break;
+
             default:
-                $message->channel->sendMessage('Sub-comando no reconocido: `add`, `remove`, `list`, `status`.');
+                $message->channel->sendMessage('Sub-command not recognized: `add`, `remove`, `list`, `status`, `fixoffset`.');
         }
     }
 
