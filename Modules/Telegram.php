@@ -66,19 +66,38 @@ class Telegram
         $map = $this->loadMap();
         if (!isset($map[$msg->channel_id])) return;
 
-        $text = sprintf("**%s** (Discord): %s", $msg->author->username, $msg->content);
+        if(!empty($msg->attachments)) {
+            foreach ($msg->attachments as $attachment) {
+                if ($attachment->isImage()) {
+                    $imageUrl = $attachment->url;
+                    $this->telegram->sendPhoto([
+                                               'chat_id' => $map[$msg->channel_id],
+                                               'photo' => $imageUrl,
+                                               'caption' => sprintf(
+                                                   "**%s** (Discord): %s",
+                                                   $msg->author>username,
+                                                   $msg->content
+                                                ),
+                                               'parse_mode' => 'markdown',
+                                            ]);
+                }
+            }
+        } else {
 
-        $this->telegram->sendMessage([
-            'chat_id'    => $map[$msg->channel_id],
-            'text'       => $text,
-            'parse_mode' => 'Markdown',
-        ]);
+            $text = sprintf("**%s** (Discord): %s", $msg->author->username, $msg->content);
+
+            $this->telegram->sendMessage([
+                'chat_id'    => $map[$msg->channel_id],
+                'text'       => $text,
+                'parse_mode' => 'Markdown',
+            ]);
+        }
     }
 
     /* ---------- Telegram → Discord (with persistent offset) ---------- */
     public function startTelegramPoller(): void
     {
-        var_dump($this->discord->getLoop());
+        /* var_dump($this->discord->getLoop()); dump of Telegram */
 
         if ($this->pollerStarted) return;
         $this->pollerStarted = true;
@@ -102,10 +121,22 @@ class Telegram
                     if (!$dcCh) continue;
 
                     $user = $upd['message']['from']['username'] ?? $upd['message']['from']['first_name'];
-                    $text = "**$user** (Telegram): {$upd['message']['text']}";
+                /* $text = "**$user** (Telegram): {$upd['message']['text']}"; Default */
+                    $text = "**$user** (Telegram): ";
 
-                    $dcChannel = $this->discord->getChannel($dcCh);
-                    $dcChannel?->sendMessage($text);
+                    if (isset($upd['message']['photo'])) {
+                        // Enviar imagen desde Telegram a Discord
+                        $photo = end($upd['message']['photo']);
+                        $this->discord->getChannel($dcCh)->sendFile{
+                            $photo['file_id'],
+                            'image.jpg',
+                            $text
+                        );
+                    } elseif (isset($upd['message']['text'])) {
+                        //Enviar texto desde Telegram a Discord
+                        $dcChannel = $this->discord->getChannel($dcCh);
+                        $dcChannel?->sendMessage($text . $upd['message']['text']);
+                    } 
 
                     // Persist last processed update_id
                     $last = $upd['update_id'];
