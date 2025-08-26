@@ -145,9 +145,10 @@ class Telegram
 
             case 'fixoffset':
                 try {
+                    $token = $this->telegram->token; // Obtén el token directamente
                     $response = json_decode(
                         file_get_contents(
-                            "https://api.telegram.org/bot{$this->telegram->getBotToken()}/getUpdates?limit=1&offset=-1"
+                            "https://api.telegram.org/bot{$token}/getUpdates?limit=1&offset=-1"
                         ),
                         true
                     );
