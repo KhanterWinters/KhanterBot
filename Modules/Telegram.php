@@ -66,6 +66,7 @@ class Telegram
         $map = $this->loadMap();
         if (!isset($map[$msg->channel_id])) return;
 
+        //Manejar archivos adjuntos (imagenes)
         if(!empty($msg->attachments)) {
             foreach ($msg->attachments as $attachment) {
                 if ($attachment->isImage()) {
@@ -127,7 +128,9 @@ class Telegram
                     if (isset($upd['message']['photo'])) {
                         // Enviar imagen desde Telegram a Discord
                         $photo = end($upd['message']['photo']);
-                        $this->discord->getChannel($dcCh)->sendFile($photo['file_id'], 'image.jpg', $text);
+                        //Obtener la extensión del archivo de la ruta proporcionada por Telegram
+                        $fileExtension = pathinfo($photo['file_path'], PATHINFO_EXTENSION);
+                        $this->discord->getChannel($dcCh)->sendFile($photo['file_id'], "image.{$fileExtension}", $text);
                         
                     } elseif (isset($upd['message']['text'])) {
                         //Enviar texto desde Telegram a Discord
