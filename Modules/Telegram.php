@@ -52,36 +52,48 @@ class Telegram
         if ($this->pollerStarted) return;
         $this->pollerStarted = true;
 
-        $last = $this->getLastOffset();
-        $this->discord->getLoop()->addPeriodicTimer(5, function () use (&$last) {
-            try {
-                $updates = $this->telegram->getUpdates([
-                    'offset'  => $last + 1,
-                    'timeout' => 30,
-                ]);
-                foreach ($updates as $upd) {
-                    if (!isset($upd['message']['text'])) continue;
-
-                    $tgChat = $upd['message']['chat']['id'];
-                    $map    = $this->loadMap();
-                    $dcCh   = array_search($tgChat, $map, true);
-
-                    if (!$dcCh) continue;
-
-                    $user = $upd['message']['from']['username'] ?? $upd['message']['from']['first_name'];
-                    $text = "**$user** (Telegram): {$upd['message']['text']}";
-
-                    $dcChannel = $this->discord->getChannel($dcCh);
-                    $dcChannel?->sendMessage($text);
-
-                    $last = $upd['update_id'];
-                    $this->setLastOffset($last);
-                }
-            } catch (\Throwable $e) {
-                // Silenciar o log
-            }
-        });
+    // Mecanismo de bloqueo para evitar instancias duplicadas
+        $lockFile = '/tmp/bot.lock';
+            if (file_exists($lockFile)) {
+            return; // Si el archivo de bloqueo existe, no iniciamos el poller
     }
+    file_put_contents($lockFile, getmypid());
+    register_shutdown_function(function() use ($lockFile) {
+        if (file_exists($lockFile)) {
+            unlink($lockFile);
+        }
+    });
+
+    $last = $this->getLastOffset();
+    $this->discord->getLoop()->addPeriodicTimer(5, function () use (&$last) {
+        try {
+            $updates = $this->telegram->getUpdates([
+                'offset'  => $last + 1,
+                'timeout' => 30,
+            ]);
+            foreach ($updates as $upd) {
+                if (!isset($upd['message']['text'])) continue;
+
+                $tgChat = $upd['message']['chat']['id'];
+                $map    = $this->loadMap();
+                $dcCh   = array_search($tgChat, $map, true);
+
+                if (!$dcCh) continue;
+
+                $user = $upd['message']['from']['username'] ?? $upd['message']['from']['first_name'];
+                $text = "**$user** (Telegram): {$upd['message']['text']}";
+
+                $dcChannel = $this->discord->getChannel($dcCh);
+                $dcChannel?->sendMessage($text);
+
+                $last = $upd['update_id'];
+                $this->setLastOffset($last);
+            }
+        } catch (\Throwable $e) {
+            // Silenciar o log
+        }
+    });
+}
 
     /* ---------- Commands ---------- */
     public function handle(Message $message): void
