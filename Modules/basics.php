@@ -1,4 +1,21 @@
 <?php
+/**
+ * Telegram Module for KhanterBot
+ *
+ * License: GNU Affero General Public License v3.0
+ * 
+ * DISCLAIMER:
+ * This software is provided "as-is" and may be freely used, modified, or studied.
+ * Commercial use under the author's name or branding is NOT permitted until trademark
+ * and notice are officially registered. Redistribution must retain this notice and the AGPL 3.0 license.
+ *
+ * Responsibilities:
+ * - Synchronizes messages between Discord channels and Telegram groups.
+ * - Discord → Telegram works for all messages in mapped channels.
+ * - Telegram → Discord works for all messages in mapped Telegram chats.
+ * - Poller runs automatically upon module initialization.
+ */
+
 namespace Modules;
 
 use Discord\Discord;
