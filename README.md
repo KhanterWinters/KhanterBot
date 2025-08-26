@@ -2,7 +2,7 @@
 
 Prospect of a Discord bot written in **PHP** with a modular architecture.
 
-> ⚠️ The bot is not running 24/7 yet.  
+> ⚠️ The bot seems to be running 24/7 now. However since uses a Free tier on Render, might have some hiccups.  
 > It needs manual revival or activity within 50 seconds.  
 > (This is currently a **critical To-Do**).
 
