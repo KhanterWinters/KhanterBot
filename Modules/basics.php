@@ -1,6 +1,6 @@
 <?php
 /**
- * Telegram Module for KhanterBot
+ * basics Module for KhanterBot
  *
  * License: GNU Affero General Public License v3.0
  * 
