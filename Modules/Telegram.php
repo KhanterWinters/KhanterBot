@@ -127,11 +127,8 @@ class Telegram
                     if (isset($upd['message']['photo'])) {
                         // Enviar imagen desde Telegram a Discord
                         $photo = end($upd['message']['photo']);
-                        $this->discord->getChannel($dcCh)->sendFile{
-                            $photo['file_id'],
-                            'image.jpg',
-                            $text
-                        );
+                        $this->discord->getChannel($dcCh)->sendFile($photo['file_id'], 'image.jpg', $text);
+                        
                     } elseif (isset($upd['message']['text'])) {
                         //Enviar texto desde Telegram a Discord
                         $dcChannel = $this->discord->getChannel($dcCh);
