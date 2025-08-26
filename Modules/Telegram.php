@@ -78,6 +78,8 @@ class Telegram
     /* ---------- Telegram → Discord (with persistent offset) ---------- */
     public function startTelegramPoller(): void
     {
+        var_dump($this->discord->getLoop());
+
         if ($this->pollerStarted) return;
         $this->pollerStarted = true;
 
