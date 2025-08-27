@@ -3,11 +3,6 @@
  * Telegram Module for KhanterBot
  *
  * License: GNU Affero General Public License v3.0
- * 
- * DISCLAIMER:
- * This software is provided "as-is" and may be freely used, modified, or studied.
- * Commercial use under the author's name or branding is NOT permitted until trademark
- * and notice are officially registered. Redistribution must retain this notice and the AGPL 3.0 license.
  *
  * Responsibilities:
  * - Synchronizes messages between Discord channels and Telegram groups.
@@ -27,7 +22,7 @@ class Telegram
     private Discord $discord;
     private TelegramClient $telegram;
     private string $storage       = __DIR__ . '/../storage/bridges.json';
-    private string $aliasesFile   = __DIR__ . '/../storage/aliases.json'; // NEW: alias persistence
+    private string $aliasesFile   = __DIR__ . '/../storage/aliases.json';
     private string $offsetFile    = __DIR__ . '/../storage/telegram_offset.txt';
     private bool $pollerStarted   = false;
 
@@ -42,7 +37,6 @@ class Telegram
         if (!$token) {
             throw new \RuntimeException('TELEGRAM_BOT_TOKEN is not defined in environment.');
         }
-
         $this->telegram = new TelegramClient($token);
 
         // Load aliases
@@ -94,7 +88,6 @@ class Telegram
                         'parse_mode' => 'Markdown',
                     ]);
                 } else {
-                    // Fallback: send file
                     $this->telegram->sendDocument([
                         'chat_id'    => $chatId,
                         'document'   => $attachment->url,
@@ -163,9 +156,7 @@ class Telegram
 
                     // Handle Telegram → Discord media
                     if (isset($upd['message']['photo'])) {
-                        $photo = end($upd['message']['photo']);
                         $dcChannel->sendMessage($prefix . "[Photo received]");
-                        // Optional: download actual photo with getFile if needed
                     } elseif (isset($upd['message']['video'])) {
                         $dcChannel->sendMessage($prefix . "[Video received]");
                     } elseif (isset($upd['message']['audio']) || isset($upd['message']['voice'])) {
@@ -174,7 +165,6 @@ class Telegram
                         $dcChannel->sendMessage($prefix . $upd['message']['text']);
                     }
 
-                    // Persist offset
                     $last = $upd['update_id'];
                     $this->setLastOffset($last);
                 }
@@ -202,8 +192,11 @@ class Telegram
                 }
                 $alias   = $pieces[1];
                 $channel = $pieces[2];
+
+                // Save alias persistently
                 $this->aliases[$alias] = $channel;
                 $this->saveAliases();
+
                 $message->channel->sendMessage("✅ Alias '$alias' set for channel $channel");
                 break;
 
@@ -215,7 +208,7 @@ class Telegram
     private function handleBridgeCommand(Message $message, array $pieces): void
     {
         if (count($pieces) < 2) {
-            $message->channel->sendMessage('Sub-commands: `add`, `remove`, `list`, `status`, `fixoffset`.');
+            $message->channel->sendMessage('Sub-commands: `add`, `remove`, `list`, `fixoffset`.');
             return;
         }
 
@@ -254,64 +247,3 @@ class Telegram
                     $map
                 );
                 $message->channel->sendMessage("Active Bridges:\n" . implode("\n", $lines));
-                break;
-
-            case 'fixoffset':
-                try {
-                    $this->setLastOffset(0); // Reset offset automatically
-                    $message->channel->sendMessage("✅ Offset reset. Telegram poller will resync automatically.");
-                } catch (\Throwable $e) {
-                    $message->channel->sendMessage("❌ Error while resetting offset: " . $e->getMessage());
-                }
-                break;
-
-            default:
-                $message->channel->sendMessage('Unknown sub-command.');
-        }
-    }
-
-    /* ---------- Bridge persistence ---------- */
-    private function loadMap(): array
-    {
-        return is_file($this->storage)
-            ? (json_decode(file_get_contents($this->storage), true) ?: [])
-            : [];
-    }
-
-    private function saveMap(array $map): void
-    {
-        file_put_contents($this->storage, json_encode($map, JSON_PRETTY_PRINT));
-    }
-
-    private function addBridge(string $dcId, int $tgId): void
-    {
-        $map = $this->loadMap();
-        $map[$dcId] = $tgId;
-        $this->saveMap($map);
-    }
-
-    private function removeBridge(string $dcId): void
-    {
-        $map = $this->loadMap();
-        unset($map[$dcId]);
-        $this->saveMap($map);
-    }
-
-    private function listBridges(): array
-    {
-        return $this->loadMap();
-    }
-
-    /* ---------- Offset persistence ---------- */
-    private function getLastOffset(): int
-    {
-        return is_file($this->offsetFile)
-            ? (int)file_get_contents($this->offsetFile)
-            : 0;
-    }
-
-    private function setLastOffset(int $offset): void
-    {
-        file_put_contents($this->offsetFile, (string)$offset);
-    }
-}
