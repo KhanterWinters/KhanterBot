@@ -208,7 +208,7 @@ class Telegram
     private function handleBridgeCommand(Message $message, array $pieces): void
     {
         if (count($pieces) < 2) {
-            $message->channel->sendMessage('Sub-commands: `add`, `remove`, `list`, `fixoffset`.');
+            $message->channel->sendMessage('Sub-commands: `add`, `remove`, `status`, `list`, `fixoffset`.');
             return;
         }
 
@@ -234,7 +234,16 @@ class Telegram
                 $this->removeBridge($dcId);
                 $message->channel->sendMessage("❌ Bridge removed: Discord {$dcId}");
                 break;
-
+            
+            case 'status':
+                $map = $this->listBridges();
+                $message->channel->sendMessage(
+                    empty($map)
+                        ? 'There are no active bridges.'
+                        : "Active Bridges: " . json_encode($map, JSON_PRETTY_PRINT)
+                );
+                break;
+            
             case 'list':
                 $map = $this->listBridges();
                 if (empty($map)) {
