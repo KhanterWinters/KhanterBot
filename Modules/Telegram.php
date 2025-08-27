@@ -247,3 +247,4 @@ class Telegram
                     $map
                 );
                 $message->channel->sendMessage("Active Bridges:\n" . implode("\n", $lines));
+        }
