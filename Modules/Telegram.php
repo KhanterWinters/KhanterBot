@@ -27,12 +27,12 @@ class Telegram
     private Discord $discord;
     private TelegramClient $telegram;
     private string $storage       = __DIR__ . '/../storage/bridges.json';
+    private string $aliasesFile   = __DIR__ . '/../storage/aliases.json'; // NEW: alias persistence
     private string $offsetFile    = __DIR__ . '/../storage/telegram_offset.txt';
     private bool $pollerStarted   = false;
 
-    /**
-     * Constructor
-     */
+    private array $aliases = []; // cache for aliases
+
     public function __construct(Discord $discord)
     {
         $this->discord = $discord;
@@ -45,18 +45,17 @@ class Telegram
 
         $this->telegram = new TelegramClient($token);
 
+        // Load aliases
+        $this->aliases = $this->loadAliases();
+
         // Log bridge map at startup
         $map = $this->loadMap();
         echo "Bridge map loaded at startup: " . json_encode($map) . PHP_EOL;
     }
 
-    /**
-     * Init is called automatically by ModuleManager after loading.
-     * Starts the Telegram poller loop.
-     */
     public function init(): void
     {
-        echo "[Telegram] init() called\n"; // <- para depuración
+        echo "[Telegram] init() called\n";
         $this->startTelegramPoller();
     }
 
@@ -66,40 +65,76 @@ class Telegram
         $map = $this->loadMap();
         if (!isset($map[$msg->channel_id])) return;
 
-        //Manejar archivos adjuntos (imagenes)
-        if(!empty($msg->attachments)) {
+        $chatId = $map[$msg->channel_id];
+
+        // Handle media attachments
+        if (!empty($msg->attachments)) {
             foreach ($msg->attachments as $attachment) {
+                $caption = sprintf("**%s** (Discord): %s", $msg->author->username, $msg->content);
+
                 if ($attachment->isImage()) {
-                    $imageUrl = $attachment->url;
                     $this->telegram->sendPhoto([
-                                               'chat_id' => $map[$msg->channel_id],
-                                               'photo' => $imageUrl,
-                                               'caption' => sprintf(
-                                                   "**%s** (Discord): %s",
-                                                   $msg->author>username,
-                                                   $msg->content
-                                                ),
-                                               'parse_mode' => 'markdown',
-                                            ]);
+                        'chat_id'    => $chatId,
+                        'photo'      => $attachment->url,
+                        'caption'    => $caption,
+                        'parse_mode' => 'Markdown',
+                    ]);
+                } elseif (str_contains($attachment->content_type, 'video')) {
+                    $this->telegram->sendVideo([
+                        'chat_id'    => $chatId,
+                        'video'      => $attachment->url,
+                        'caption'    => $caption,
+                        'parse_mode' => 'Markdown',
+                    ]);
+                } elseif (str_contains($attachment->content_type, 'audio') || str_contains($attachment->content_type, 'voice')) {
+                    $this->telegram->sendAudio([
+                        'chat_id'    => $chatId,
+                        'audio'      => $attachment->url,
+                        'caption'    => $caption,
+                        'parse_mode' => 'Markdown',
+                    ]);
+                } else {
+                    // Fallback: send file
+                    $this->telegram->sendDocument([
+                        'chat_id'    => $chatId,
+                        'document'   => $attachment->url,
+                        'caption'    => $caption,
+                        'parse_mode' => 'Markdown',
+                    ]);
                 }
             }
         } else {
-
+            // Normal text message
             $text = sprintf("**%s** (Discord): %s", $msg->author->username, $msg->content);
-
             $this->telegram->sendMessage([
-                'chat_id'    => $map[$msg->channel_id],
+                'chat_id'    => $chatId,
                 'text'       => $text,
                 'parse_mode' => 'Markdown',
             ]);
         }
     }
 
-    /* ---------- Telegram → Discord (with persistent offset) ---------- */
+    /* ---------- Alias System ---------- */
+    private function loadAliases(): array
+    {
+        return is_file($this->aliasesFile)
+            ? (json_decode(file_get_contents($this->aliasesFile), true) ?: [])
+            : [];
+    }
+
+    private function saveAliases(): void
+    {
+        file_put_contents($this->aliasesFile, json_encode($this->aliases, JSON_PRETTY_PRINT));
+    }
+
+    private function resolveAlias(string $id): string
+    {
+        return $this->aliases[$id] ?? $id;
+    }
+
+    /* ---------- Telegram → Discord ---------- */
     public function startTelegramPoller(): void
     {
-        /* var_dump($this->discord->getLoop()); dump of Telegram */
-
         if ($this->pollerStarted) return;
         $this->pollerStarted = true;
 
@@ -109,57 +144,76 @@ class Telegram
             try {
                 $updates = $this->telegram->getUpdates([
                     'offset'  => $last + 1,
-                    'timeout' => 0, // non-blocking
+                    'timeout' => 0,
                 ]);
 
                 foreach ($updates as $upd) {
-                    if (!isset($upd['message']['text'])) continue;
+                    $tgChat = $upd['message']['chat']['id'] ?? null;
+                    if (!$tgChat) continue;
 
-                    $tgChat = $upd['message']['chat']['id'];
-                    $map    = $this->loadMap();
-                    $dcCh   = array_search($tgChat, $map, true);
-
+                    $map  = $this->loadMap();
+                    $dcCh = array_search($tgChat, $map, true);
                     if (!$dcCh) continue;
 
                     $user = $upd['message']['from']['username'] ?? $upd['message']['from']['first_name'];
-                /* $text = "**$user** (Telegram): {$upd['message']['text']}"; Default */
-                    $text = "**$user** (Telegram): ";
+                    $prefix = "**$user** (Telegram): ";
 
+                    $dcChannel = $this->discord->getChannel($dcCh);
+                    if (!$dcChannel) continue;
+
+                    // Handle Telegram → Discord media
                     if (isset($upd['message']['photo'])) {
-                        // Enviar imagen desde Telegram a Discord
                         $photo = end($upd['message']['photo']);
-                        //Obtener la extensión del archivo de la ruta proporcionada por Telegram
-                        $fileExtension = pathinfo($photo['file_path'], PATHINFO_EXTENSION);
-                        $this->discord->getChannel($dcCh)->sendFile($photo['file_id'], "image.{$fileExtension}", $text);
-                        
+                        $dcChannel->sendMessage($prefix . "[Photo received]");
+                        // Optional: download actual photo with getFile if needed
+                    } elseif (isset($upd['message']['video'])) {
+                        $dcChannel->sendMessage($prefix . "[Video received]");
+                    } elseif (isset($upd['message']['audio']) || isset($upd['message']['voice'])) {
+                        $dcChannel->sendMessage($prefix . "[Audio received]");
                     } elseif (isset($upd['message']['text'])) {
-                        //Enviar texto desde Telegram a Discord
-                        $dcChannel = $this->discord->getChannel($dcCh);
-                        $dcChannel?->sendMessage($text . $upd['message']['text']);
-                    } 
+                        $dcChannel->sendMessage($prefix . $upd['message']['text']);
+                    }
 
-                    // Persist last processed update_id
+                    // Persist offset
                     $last = $upd['update_id'];
                     $this->setLastOffset($last);
                 }
             } catch (\Throwable $e) {
-                // Log errors silently, avoid killing the bot
                 echo "Telegram poller error: " . $e->getMessage() . PHP_EOL;
             }
         });
     }
 
-    /* ---------- Command handler for Discord ---------- */
+    /* ---------- Command handler ---------- */
     public function handle(Message $message): void
     {
-        $text   = $message->content;
+        $text   = trim($message->content);
         $pieces = explode(' ', $text);
 
-        if ($pieces[0] !== '!bridge') {
-            $this->handleDiscord($message);
-            return;
-        }
+        switch ($pieces[0]) {
+            case '!bridge':
+                $this->handleBridgeCommand($message, $pieces);
+                break;
 
+            case '!set':
+                if (count($pieces) < 3) {
+                    $message->channel->sendMessage("Usage: `!set <alias> <channelId>`");
+                    return;
+                }
+                $alias   = $pieces[1];
+                $channel = $pieces[2];
+                $this->aliases[$alias] = $channel;
+                $this->saveAliases();
+                $message->channel->sendMessage("✅ Alias '$alias' set for channel $channel");
+                break;
+
+            default:
+                $this->handleDiscord($message);
+        }
+    }
+
+    private function handleBridgeCommand(Message $message, array $pieces): void
+    {
         if (count($pieces) < 2) {
             $message->channel->sendMessage('Sub-commands: `add`, `remove`, `list`, `status`, `fixoffset`.');
             return;
@@ -168,20 +222,22 @@ class Telegram
         switch ($pieces[1]) {
             case 'add':
                 if (count($pieces) !== 4) {
-                    $message->channel->sendMessage('Use: `!bridge add <discordId> <telegramId>`');
+                    $message->channel->sendMessage('Use: `!bridge add <discordId|alias> <telegramId>`');
                     return;
                 }
                 [$cmd, $sub, $dcId, $tgId] = $pieces;
+                $dcId = $this->resolveAlias($dcId);
                 $this->addBridge($dcId, (int)$tgId);
                 $message->channel->sendMessage("✅ Bridge Added: Discord {$dcId} ↔ Telegram {$tgId}");
                 break;
 
             case 'remove':
                 if (count($pieces) !== 3) {
-                    $message->channel->sendMessage('Use: `!bridge remove <discordId>`');
+                    $message->channel->sendMessage('Use: `!bridge remove <discordId|alias>`');
                     return;
                 }
                 [$cmd, $sub, $dcId] = $pieces;
+                $dcId = $this->resolveAlias($dcId);
                 $this->removeBridge($dcId);
                 $message->channel->sendMessage("❌ Bridge removed: Discord {$dcId}");
                 break;
@@ -200,45 +256,26 @@ class Telegram
                 $message->channel->sendMessage("Active Bridges:\n" . implode("\n", $lines));
                 break;
 
-            case 'status':
-                $map = $this->listBridges();
-                $message->channel->sendMessage(
-                    empty($map)
-                        ? 'There are no active bridges.'
-                        : "Active Bridges: " . json_encode($map, JSON_PRETTY_PRINT)
-                );
-                break;
-
             case 'fixoffset':
                 try {
-                    $response = json_decode(
-                        file_get_contents(
-                            "https://api.telegram.org/bot{$this->telegram->getAccessToken()}/getUpdates?limit=1&offset=-1"
-                        ),
-                        true
-                    );
-                    if (!empty($response['result'])) {
-                        $last = $response['result'][0]['update_id'];
-                        $this->setLastOffset($last);
-                        $message->channel->sendMessage("✅ Offset updated to: $last");
-                    } else {
-                        $this->setLastOffset(0);
-                        $message->channel->sendMessage("⚠️ No messages; offset reset to 0");
-                    }
+                    $this->setLastOffset(0); // Reset offset automatically
+                    $message->channel->sendMessage("✅ Offset reset. Telegram poller will resync automatically.");
                 } catch (\Throwable $e) {
-                    $message->channel->sendMessage("❌ Error while updating offset: " . $e->getMessage());
+                    $message->channel->sendMessage("❌ Error while resetting offset: " . $e->getMessage());
                 }
                 break;
 
             default:
-                $message->channel->sendMessage('Sub-command not recognized: `add`, `remove`, `list`, `status`, `fixoffset`.');
+                $message->channel->sendMessage('Unknown sub-command.');
         }
     }
 
-    /* ---------- Bridge management ---------- */
+    /* ---------- Bridge persistence ---------- */
     private function loadMap(): array
     {
-        return json_decode(file_get_contents($this->storage), true) ?: [];
+        return is_file($this->storage)
+            ? (json_decode(file_get_contents($this->storage), true) ?: [])
+            : [];
     }
 
     private function saveMap(array $map): void
@@ -265,7 +302,7 @@ class Telegram
         return $this->loadMap();
     }
 
-    /* ---------- Offset helpers ---------- */
+    /* ---------- Offset persistence ---------- */
     private function getLastOffset(): int
     {
         return is_file($this->offsetFile)
