@@ -14,8 +14,8 @@
  *
  * Responsibilities:
  * - Synchronizes messages between Discord channels and Telegram groups.
- * - Discord → Telegram works for all messages in mapped channels.
- * - Telegram → Discord works for all messages in mapped Telegram chats.
+ * - Telegram → Discord supports multiple channels via aliases.
+ * - Discord → Telegram forwards messages from a single Discord channel to the main Telegram group.
  * - Poller runs automatically upon module initialization.
  */
 
@@ -34,22 +34,24 @@ class Telegram
     private TelegramClient $telegram;
 
     // JSON storage files
-    private string $storage     = __DIR__ . '/../storage/bridges.json';
     private string $aliasesFile = __DIR__ . '/../storage/aliases.json';
+    private string $bridgeFile  = __DIR__ . '/../storage/bridge.json';
     private string $offsetFile  = __DIR__ . '/../storage/telegram_offset.txt';
 
     // Poller status
     private bool $pollerStarted = false;
 
-    // Cached aliases
+    // Cached data
     private array $aliases = [];
+    private int $discordToTelegramChannel = 0; // Discord channel ID to forward to Telegram
 
     /**
      * Constructor
      */
-    public function __construct(Discord $discord)
+    public function __construct(Discord $discord, int $discordChannelToTelegram)
     {
         $this->discord = $discord;
+        $this->discordToTelegramChannel = $discordChannelToTelegram;
 
         // Fetch Telegram token from environment
         $token = getenv('TELEGRAM_BOT_TOKEN') ?: ($_ENV['TELEGRAM_BOT_TOKEN'] ?? null);
@@ -58,11 +60,10 @@ class Telegram
         }
         $this->telegram = new TelegramClient($token);
 
-        // Load aliases from JSON file
+        // Load aliases
         $this->aliases = $this->loadAliases();
 
-        // Log bridges at startup
-        echo "Bridge map loaded at startup: " . json_encode($this->loadMap()) . PHP_EOL;
+        echo "Telegram module initialized. Aliases loaded: " . json_encode($this->aliases) . PHP_EOL;
     }
 
     /**
@@ -72,85 +73,6 @@ class Telegram
     {
         echo "[Telegram] init() called\n";
         $this->startTelegramPoller();
-    }
-
-    /* ---------------- Discord → Telegram ---------------- */
-    private function handleDiscord(Message $msg): void
-    {
-        // Reload bridge map each time (reflect recent changes)
-        $map = $this->loadMap();
-
-        // Resolve alias if any
-        $channelId = $this->resolveAlias($msg->channel_id);
-
-        if (!isset($map[$channelId])) return;
-
-        $chatId = $map[$channelId];
-        $prefix = "**{$msg->author->username}** (Discord): ";
-
-        if (!empty($msg->attachments)) {
-            // Send media attachments
-            foreach ($msg->attachments as $att) {
-                $caption = $prefix . $msg->content;
-                if ($att->isImage()) {
-                    $this->telegram->sendPhoto([
-                        'chat_id' => $chatId,
-                        'photo' => $att->url,
-                        'caption' => $caption,
-                        'parse_mode' => 'Markdown',
-                    ]);
-                } elseif (str_contains($att->content_type,'video')) {
-                    $this->telegram->sendVideo([
-                        'chat_id' => $chatId,
-                        'video' => $att->url,
-                        'caption' => $caption,
-                        'parse_mode' => 'Markdown',
-                    ]);
-                } elseif (str_contains($att->content_type,'audio') || str_contains($att->content_type,'voice')) {
-                    $this->telegram->sendAudio([
-                        'chat_id' => $chatId,
-                        'audio' => $att->url,
-                        'caption' => $caption,
-                        'parse_mode' => 'Markdown',
-                    ]);
-                } else {
-                    $this->telegram->sendDocument([
-                        'chat_id' => $chatId,
-                        'document' => $att->url,
-                        'caption' => $caption,
-                        'parse_mode' => 'Markdown',
-                    ]);
-                }
-            }
-        } else {
-            // Send plain text message
-            $this->telegram->sendMessage([
-                'chat_id' => $chatId,
-                'text' => $prefix . $msg->content,
-                'parse_mode' => 'Markdown',
-            ]);
-        }
-    }
-
-    /* ---------------- Alias System ---------------- */
-    private function loadAliases(): array
-    {
-        return is_file($this->aliasesFile)
-            ? json_decode(file_get_contents($this->aliasesFile), true) ?: []
-            : [];
-    }
-
-    private function saveAliases(): void
-    {
-        file_put_contents($this->aliasesFile, json_encode($this->aliases, JSON_PRETTY_PRINT));
-    }
-
-    /**
-     * Resolve a Discord ID using alias
-     */
-    private function resolveAlias(string $id): string
-    {
-        return $this->aliases[$id] ?? $id;
     }
 
     /* ---------------- Telegram → Discord ---------------- */
@@ -168,23 +90,24 @@ class Telegram
                     $msg = $upd['message'] ?? null;
                     if (!$msg) continue;
 
-                    $tgChat = $msg['chat']['id'] ?? null;
-                    if (!$tgChat) continue;
+                    $text = $msg['text'] ?? '';
+                    if (!$text) continue;
 
-                    $map = $this->loadMap();
-                    $dcCh = array_search($tgChat, $map, true);
-                    if (!$dcCh) continue;
+                    // Detect alias (format: #Alias - message)
+                    if (preg_match('/^#([^\s]+)\s*-\s*(.+)$/', $text, $matches)) {
+                        $alias = $matches[1];
+                        $messageContent = $matches[2];
 
-                    $user = $msg['from']['username'] ?? $msg['from']['first_name'];
-                    $prefix = "**$user** (Telegram): ";
+                        $map = $this->loadAliases();
+                        if (!isset($map[$alias])) continue;
 
-                    $dcChannel = $this->discord->getChannel($dcCh);
-                    if (!$dcChannel) continue;
+                        $discordChannelId = $map[$alias];
+                        $dcChannel = $this->discord->getChannel($discordChannelId);
+                        if (!$dcChannel) continue;
 
-                    if (isset($msg['photo'])) $dcChannel->sendMessage($prefix."[Photo received]");
-                    elseif (isset($msg['video'])) $dcChannel->sendMessage($prefix."[Video received]");
-                    elseif (isset($msg['audio']) || isset($msg['voice'])) $dcChannel->sendMessage($prefix."[Audio received]");
-                    elseif (isset($msg['text'])) $dcChannel->sendMessage($prefix.$msg['text']);
+                        $user = $msg['from']['username'] ?? $msg['from']['first_name'];
+                        $dcChannel->sendMessage("**$user** (Telegram): $messageContent");
+                    }
 
                     $last = $upd['update_id'];
                     $this->setLastOffset($last);
@@ -195,6 +118,20 @@ class Telegram
         });
     }
 
+    /* ---------------- Discord → Telegram ---------------- */
+    private function handleDiscord(Message $msg): void
+    {
+        // Only forward messages from the designated Discord channel
+        if ($msg->channel_id != $this->discordToTelegramChannel) return;
+
+        $text = "**{$msg->author->username}** (Discord): {$msg->content}";
+        $this->telegram->sendMessage([
+            'chat_id' => $this->getTelegramGroupId(),
+            'text' => $text,
+            'parse_mode' => 'Markdown',
+        ]);
+    }
+
     /* ---------------- Command Handler ---------------- */
     public function handle(Message $message): void
     {
@@ -202,23 +139,22 @@ class Telegram
         $pieces = explode(' ', $text);
 
         switch ($pieces[0]) {
-            case '!bridge':
-                $this->handleBridgeCommand($message, $pieces);
-                break;
-
             case '!set':
                 if (count($pieces) < 3) {
-                    $message->channel->sendMessage("Usage: `!set <alias> <channelId>`");
+                    $message->channel->sendMessage("Usage: `!set <alias> <discordChannelId>`");
                     return;
                 }
                 $alias = $pieces[1];
-                $channel = $pieces[2];
+                $channelId = $pieces[2];
 
-                // Save alias persistently
-                $this->aliases[$alias] = $channel;
+                $this->aliases[$alias] = $channelId;
                 $this->saveAliases();
 
-                $message->channel->sendMessage("✅ Alias '$alias' set for channel $channel");
+                $message->channel->sendMessage("✅ Alias '$alias' saved for Discord channel $channelId");
+                break;
+
+            case '!bridge':
+                $this->handleBridgeCommand($message, $pieces);
                 break;
 
             default:
@@ -229,87 +165,40 @@ class Telegram
     private function handleBridgeCommand(Message $message, array $pieces): void
     {
         if (count($pieces) < 2) {
-            $message->channel->sendMessage('Sub-commands: `add`, `remove`, `status`, `list`, `fixoffset`.');
+            $message->channel->sendMessage('Sub-commands: `status`, `list`.');
             return;
         }
 
         switch ($pieces[1]) {
-            case 'add':
-                if (count($pieces) !== 4) {
-                    $message->channel->sendMessage('Use: `!bridge add <discordId|alias> <telegramId>`');
-                    return;
-                }
-                [$cmd, $sub, $dcId, $tgId] = $pieces;
-                $dcId = $this->resolveAlias($dcId);
-                $this->addBridge($dcId, (int)$tgId);
-                $message->channel->sendMessage("✅ Bridge Added: Discord {$dcId} ↔ Telegram {$tgId}");
-                break;
-
-            case 'remove':
-                if (count($pieces) !== 3) {
-                    $message->channel->sendMessage('Use: `!bridge remove <discordId|alias>`');
-                    return;
-                }
-                [$cmd, $sub, $dcId] = $pieces;
-                $dcId = $this->resolveAlias($dcId);
-                $this->removeBridge($dcId);
-                $message->channel->sendMessage("❌ Bridge removed: Discord {$dcId}");
-                break;
-
             case 'status':
-                $map = $this->listBridges();
                 $message->channel->sendMessage(
-                    empty($map)
-                        ? 'No active bridges.'
-                        : "Active Bridges:\n" . json_encode($map, JSON_PRETTY_PRINT)
+                    empty($this->aliases)
+                        ? 'No aliases configured.'
+                        : "Current aliases:\n" . json_encode($this->aliases, JSON_PRETTY_PRINT)
                 );
                 break;
 
             case 'list':
-                $map = $this->listBridges();
-                if (empty($map)) {
-                    $message->channel->sendMessage('No active bridges.');
-                    return;
+                $lines = [];
+                foreach ($this->aliases as $alias => $channel) {
+                    $lines[] = "#$alias → Discord Channel: $channel";
                 }
-                $lines = array_map(fn($dc,$tg) => "Discord **{$dc}** ↔ Telegram **{$tg}**", array_keys($map), $map);
-                $message->channel->sendMessage("Active Bridges:\n" . implode("\n", $lines));
-                break;
-
-            case 'fixoffset':
-                $this->setLastOffset(0);
-                $message->channel->sendMessage("✅ Telegram offset reset to 0.");
+                $message->channel->sendMessage(
+                    empty($lines) ? 'No aliases configured.' : implode("\n", $lines)
+                );
                 break;
         }
     }
 
-    /* ---------------- Bridge Management ---------------- */
-    private function loadMap(): array
+    /* ---------------- Alias Management ---------------- */
+    private function loadAliases(): array
     {
-        return is_file($this->storage) ? json_decode(file_get_contents($this->storage), true) ?? [] : [];
+        return is_file($this->aliasesFile) ? json_decode(file_get_contents($this->aliasesFile), true) ?? [] : [];
     }
 
-    private function saveMap(array $map): void
+    private function saveAliases(): void
     {
-        file_put_contents($this->storage, json_encode($map, JSON_PRETTY_PRINT));
-    }
-
-    private function addBridge(string $discordId, int $telegramId): void
-    {
-        $map = $this->loadMap();
-        $map[$discordId] = $telegramId;
-        $this->saveMap($map);
-    }
-
-    private function removeBridge(string $discordId): void
-    {
-        $map = $this->loadMap();
-        unset($map[$discordId]);
-        $this->saveMap($map);
-    }
-
-    private function listBridges(): array
-    {
-        return $this->loadMap();
+        file_put_contents($this->aliasesFile, json_encode($this->aliases, JSON_PRETTY_PRINT));
     }
 
     /* ---------------- Telegram Offset ---------------- */
@@ -321,5 +210,12 @@ class Telegram
     private function setLastOffset(int $offset): void
     {
         file_put_contents($this->offsetFile, $offset);
+    }
+
+    /* ---------------- Telegram Group ID ---------------- */
+    private function getTelegramGroupId(): int
+    {
+        // Hardcoded or configurable Telegram group ID
+        return (int)getenv('TELEGRAM_GROUP_ID');
     }
 }
