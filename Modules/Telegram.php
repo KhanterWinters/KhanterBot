@@ -247,4 +247,57 @@ class Telegram
                     $map
                 );
                 $message->channel->sendMessage("Active Bridges:\n" . implode("\n", $lines));
+                break;
+
+            case 'fixoffset':
+                $this->setLastOffset(0);
+                $message->channel->sendMessage("✅ Telegram offset has been reset to 0.");
+                break;
         }
+    }
+
+    /* ---------- Bridge Management Methods ---------- */
+    
+    private function loadMap(): array
+    {
+        return is_file($this->storage)
+            ? (json_decode(file_get_contents($this->storage), true) ?: [])
+            : [];
+    }
+
+    private function saveMap(array $map): void
+    {
+        file_put_contents($this->storage, json_encode($map, JSON_PRETTY_PRINT));
+    }
+
+    private function addBridge(string $discordId, int $telegramId): void
+    {
+        $map = $this->loadMap();
+        $map[$discordId] = $telegramId;
+        $this->saveMap($map);
+    }
+
+    private function removeBridge(string $discordId): void
+    {
+        $map = $this->loadMap();
+        unset($map[$discordId]);
+        $this->saveMap($map);
+    }
+
+    private function listBridges(): array
+    {
+        return $this->loadMap();
+    }
+
+    private function getLastOffset(): int
+    {
+        return is_file($this->offsetFile)
+            ? (int)file_get_contents($this->offsetFile)
+            : 0;
+    }
+
+    private function setLastOffset(int $offset): void
+    {
+        file_put_contents($this->offsetFile, $offset);
+    }
+}
