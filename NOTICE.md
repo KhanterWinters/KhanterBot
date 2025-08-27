@@ -5,8 +5,8 @@ This software is provided "AS IS", without warranty of any kind.
 
 Usage Restrictions:
 -------------------
-- The use of this bot is not authorized in groups or communities related to King's Choice unless 
-  explicit authorization.  
+- The use of this bot is not authorized in groups or communities related to King's Choice,
+  Travian Games, Cyber Nations, unless explicit authorization.  
 - The development team reserves the right to restrict or revoke access to any instance of the bot  
   in any server, group, or user that violates this restriction.
 
