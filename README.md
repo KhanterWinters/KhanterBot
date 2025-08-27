@@ -48,6 +48,7 @@ Prospect of a Discord bot written in **PHP** with a modular architecture.
   - Needs permission to **Read & Send** messages.
 - Current features:
   - ✅ Mentions from **Telegram → Discord** work.
+  - ⚠️ Biderectional messages from Telegram to different channels on Discord. **Work in progress**
   - ❌ Mentions from **Discord → Telegram** need to be revisited.
 - Goal: allow registration of **multiple channels** into a single group.
 
