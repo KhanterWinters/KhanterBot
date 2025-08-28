@@ -61,9 +61,9 @@ Prospect of a Discord bot written in **PHP** with a modular architecture.
 ---
 
 ## 📌 Roadmap
-- [✅] Keep the bot alive **24/7** (critical).
+- [x] Keep the bot alive **24/7** (critical).
 - [ ] Expand utility commands.
-- [✅] Finalize Discord ↔ Telegram sync. || Discord to Telegram Is instantaneous. Howeber Telegram to Discord has a 3 seconds Delay.
+- [x] Finalize Discord ↔ Telegram sync. || Discord to Telegram Is instantaneous. Howeber Telegram to Discord has a 3 seconds Delay.
 - [ ] Add YouTube fetching.
 - [ ] Improve multilingual support.
 - [ ] Travian Kingdoms API integration.
